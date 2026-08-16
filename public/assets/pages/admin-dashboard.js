@@ -491,6 +491,28 @@ function clearPickedSong() {
   if (wrap) wrap.hidden = true;
 }
 
+/* -------------------------------------------------------------- */
+/* Announcement / Activity Log modals — moved out of column 3 and
+ * into the KJ menu (see [data-open-announcement]/[data-open-activity]
+ * in admin-dashboard.php) so the third column fits on screen without
+ * scrolling. Both are plain <dialog> elements; a shared
+ * [data-close-dialog] handler in init() closes whichever is open. */
+/* -------------------------------------------------------------- */
+
+function openAnnouncementModal() {
+  const dialog = $('[data-announcement-modal]');
+  if (!dialog) return;
+  if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+  $('textarea[name="message"]', dialog)?.focus();
+}
+
+function openActivityModal() {
+  const dialog = $('[data-activity-modal]');
+  if (!dialog) return;
+  if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+  loadActivity();
+}
+
 export function init() {
   // Login (admin-dashboard runs on /admin/login too — guard via form presence).
   $('[data-login-form]')?.addEventListener('submit', async event => {
@@ -555,6 +577,13 @@ export function init() {
     }
     if (event.target.closest('[data-add-request]')) { openAddRequestModal(); return; }
     if (event.target.closest('[data-modal-cancel]')) { closeAddRequestModal(); return; }
+
+    const openAnnouncement = event.target.closest('[data-open-announcement]');
+    if (openAnnouncement) { event.preventDefault(); openAnnouncement.closest('details')?.removeAttribute('open'); openAnnouncementModal(); return; }
+    const openActivity = event.target.closest('[data-open-activity]');
+    if (openActivity) { event.preventDefault(); openActivity.closest('details')?.removeAttribute('open'); openActivityModal(); return; }
+    const closeDialog = event.target.closest('[data-close-dialog]');
+    if (closeDialog) { closeDialog.closest('dialog')?.close(); return; }
 
     if (event.target.closest('[data-session-end]')) {
       if (!confirm('End the current session? The queue will be archived.')) return;
@@ -688,6 +717,17 @@ export function init() {
       if (event.target === addRequestDialog) closeAddRequestModal(); // backdrop click
     });
   }
+
+  // Announcement / Activity Log modals: backdrop click closes, same as
+  // the Add Request modal above. Esc (the native "cancel" event) already
+  // closes a <dialog> with no listener needed.
+  $('[data-announcement-modal]')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+  $('[data-activity-modal]')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+
   $('[data-add-request-form]')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.target;

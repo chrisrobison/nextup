@@ -68,6 +68,9 @@ $dashboardQr = QrCode::svg($singerUrl, 96);
         <details class="kj-menu">
           <summary><?= e($tenant['night_name'] ?: 'KJ') ?></summary>
           <div class="kj-menu-panel">
+            <a href="#" data-open-announcement>📣 Announcement to Displays</a>
+            <a href="#" data-open-activity>🕘 Activity Log</a>
+            <div class="kj-menu-divider"></div>
             <a href="<?= e(Url::path('/admin/settings')) ?>">Settings</a>
             <a href="<?= e(Url::path('/admin/help')) ?>" data-help-modal>Shortcuts &amp; Support</a>
             <a href="<?= e(Url::path('/admin/promote')) ?>">Print poster</a>
@@ -143,22 +146,6 @@ $dashboardQr = QrCode::svg($singerUrl, 96);
         <div class="panel connected-displays" id="displays">
           <div class="panel-head"><h2>Connected Displays <span class="count-badge" data-displays-count>0</span></h2></div>
           <div data-connected-displays><p class="muted">Loading…</p></div>
-        </div>
-
-        <div class="panel announcement-panel">
-          <h2>Announcement to Displays</h2>
-          <form data-announcement-form>
-            <textarea name="message" maxlength="500" placeholder="Welcome! Thanks for joining us tonight." rows="2"></textarea>
-            <div class="announcement-actions">
-              <button class="primary">📣 Send Announcement</button>
-              <span class="announcement-count" data-announcement-count>0 / 500</span>
-            </div>
-          </form>
-        </div>
-
-        <div class="panel activity-log">
-          <div class="panel-head"><h2>Activity Log</h2></div>
-          <div data-activity-log><p class="muted">No activity yet.</p></div>
         </div>
 
         <details class="panel session-panel">
@@ -244,6 +231,34 @@ $dashboardQr = QrCode::svg($singerUrl, 96);
           <button type="submit" class="primary">Add Request</button>
         </div>
       </form>
+    </dialog>
+
+    <!-- Announcement modal — reachable from the KJ menu so column 3 doesn't
+         have to carry a permanently-open form for something sent a few
+         times a night. -->
+    <dialog data-announcement-modal class="side-modal">
+      <div class="side-modal-head">
+        <h2>Announcement to Displays</h2>
+        <button type="button" class="icon-btn" data-close-dialog title="Close">✕</button>
+      </div>
+      <form data-announcement-form>
+        <textarea name="message" maxlength="500" placeholder="Welcome! Thanks for joining us tonight." rows="4"></textarea>
+        <div class="announcement-actions">
+          <button class="primary">📣 Send Announcement</button>
+          <span class="announcement-count" data-announcement-count>0 / 500</span>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Activity log modal — same reasoning as the announcement modal: a
+         scrolling history the KJ checks occasionally, not something that
+         needs to sit permanently in the column. -->
+    <dialog data-activity-modal class="side-modal">
+      <div class="side-modal-head">
+        <h2>Activity Log</h2>
+        <button type="button" class="icon-btn" data-close-dialog title="Close">✕</button>
+      </div>
+      <div class="side-modal-body" data-activity-log><p class="muted">No activity yet.</p></div>
     </dialog>
   </section>
 </section>

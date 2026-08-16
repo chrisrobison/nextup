@@ -149,9 +149,10 @@
 .kj-menu > summary::-webkit-details-marker { display: none; }
 .kj-menu > summary::after { content: ' ▾'; }
 .kj-menu[open] > summary::after { content: ' ▴'; }
-.kj-menu-panel { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: grid; gap: 2px; min-width: 180px; z-index: 20; }
+.kj-menu-panel { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: grid; gap: 2px; min-width: 200px; z-index: 20; }
 .kj-menu-panel a { padding: 8px 10px; border-radius: 6px; color: var(--text); }
 .kj-menu-panel a:hover { background: var(--surface-2); }
+.kj-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
 
 /* ---------- Stat tiles ----------
  * The mockup folds these counts into panel-header badges instead of a
@@ -385,13 +386,16 @@
 .display-card-actions button[data-message-screen] { background: rgba(59, 111, 224, .16); border-color: rgba(59, 111, 224, .5); color: #a9c3ff; }
 .display-card-actions button[data-blackout-screen] { background: rgba(110, 36, 48, .35); border-color: var(--kj-maroon); color: #ffb2bd; }
 
-/* ---------- Announcement + activity ---------- */
-.announcement-panel textarea { margin-bottom: 8px; resize: vertical; }
-.announcement-panel button.primary { background: var(--kj-violet); border-color: var(--kj-violet); color: var(--kj-violet-text); }
+/* ---------- Announcement + activity ----------
+ * Both now live in [data-announcement-modal]/[data-activity-modal]
+ * dialogs (see .side-modal below), reached from the KJ menu instead of
+ * sitting permanently in column 3 — see admin-dashboard.php.
+ */
+[data-announcement-modal] textarea { margin-bottom: 8px; resize: vertical; }
+[data-announcement-modal] button.primary { background: var(--kj-violet); border-color: var(--kj-violet); color: var(--kj-violet-text); }
 .announcement-actions { display: flex; align-items: center; gap: 10px; }
 .announcement-actions button { flex: 1 1 auto; }
 .announcement-count { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.activity-log > div { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
 .activity-row { display: grid; grid-template-columns: 10px 60px 1fr; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .activity-row time { color: var(--muted); white-space: nowrap; }
 .activity-dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; background: var(--muted); }
@@ -438,6 +442,37 @@
 .add-request-modal .song-results { max-height: 220px; overflow-y: auto; }
 .add-request-modal button.primary { background: var(--primary); border-color: var(--primary); }
 
+/* ---------- Announcement / Activity Log modals ----------
+ * Moved out of column 3 (see admin-dashboard.php) so the dashboard fits
+ * a fixed-height "desktop app" shell without scrolling — see the
+ * no-scroll layout rules further down. Shares the Add Request modal's
+ * visual language but with its own header row + close button since
+ * neither has a Cancel/Submit footer.
+ */
+.side-modal {
+  border: 1px solid var(--kj-panel-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, #14152e 18%);
+  color: var(--text);
+  padding: 18px 20px 20px;
+  width: min(520px, 92vw);
+  max-height: min(640px, 84vh);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+}
+/* display must stay conditional on [open] — an unconditional `display`
+ * here would override the UA's `dialog:not([open]) { display: none }`
+ * default (author styles always win over UA styles regardless of
+ * specificity), leaving the dialog permanently visible in normal flow
+ * instead of hidden until .showModal() promotes it to the top layer. */
+.side-modal[open] { display: flex; flex-direction: column; }
+.side-modal::backdrop { background: rgba(4, 6, 10, .72); }
+.side-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex: 0 0 auto; }
+.side-modal-head h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .05em; margin: 0; color: #c7b8ff; }
+.side-modal-head .icon-btn { padding: 4px 10px; font-size: 14px; }
+.side-modal form { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.side-modal-body { min-height: 0; overflow-y: auto; display: grid; gap: 6px; padding-right: 2px; }
+[data-announcement-modal] textarea { flex: 1 1 auto; min-height: 120px; }
+
 /* Confirmation that a song was actually chosen. The search box changing
  * text was the only prior feedback, which read as "nothing happened". */
 .picked-song {
@@ -466,6 +501,124 @@
 .walkup-song-fields { display: grid; gap: 10px; padding-top: 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .modal-actions button { width: auto; padding: 10px 16px; }
+
+/* ---------- Fixed "desktop app" shell (no page-level scrolling) ----------
+ * Below 1101px the columns stack into one flow (see the max-width:1100px
+ * block below) and the page scrolls normally — right for phone/tablet.
+ * Between 1101–1500px .kj-side wraps onto its own second row (see the
+ * max-width:1500px block below) so it still needs natural page scroll —
+ * forcing the columns row to a single fixed-height track there would
+ * clip whatever didn't fit. Only at 1501px+, where .kj-columns is back
+ * to one clean 3-column row, does it make sense to pin the shell
+ * (topbar + sidebar + dashboard) to the viewport and let each panel
+ * that can grow unbounded (incoming requests, rotation queue, connected
+ * displays) scroll internally instead of pushing the whole page down.
+ * Scoped to body.admin-dashboard (dashboard.css only loads on this page
+ * anyway) so no other admin-* page is affected — they don't have
+ * internal scroll regions built for this yet.
+ */
+@media (min-width: 1501px) {
+  body.admin-dashboard {
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  body.admin-dashboard .topbar { flex: 0 0 auto; }
+  body.admin-dashboard main[data-page] {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  body.admin-dashboard .admin-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  body.admin-dashboard .admin-sidebar {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  body.admin-dashboard .kj-console {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Alerts/toolbar/stats/footer keep their natural height; the columns
+     row takes whatever is left and internal panels scroll within it. */
+  .kj-console > .kj-alert,
+  .kj-console > .kj-toolbar,
+  .kj-console > .admin-stats,
+  .kj-console > .kj-status-bar { flex: 0 0 auto; }
+
+  .kj-columns {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .kj-col { min-height: 0; overflow: hidden; }
+
+  /* Column 1: incoming requests fills the column, its list scrolls. */
+  .kj-incoming { max-height: none; flex: 1 1 auto; min-height: 0; }
+  .incoming-list { flex: 1 1 auto; min-height: 0; }
+
+  /* Column 2: rotation queue grows to fill, now-playing keeps its
+     natural height pinned to the bottom. */
+  .kj-rotation-col { min-height: 0; }
+  .kj-rotation { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .kj-rotation .queue-board { max-height: none; flex: 1 1 auto; min-height: 0; }
+  .now-playing { flex: 0 0 auto; }
+
+  /* Column 3: crowd preview + connected displays + session panel now
+     fit without the announcement/activity panels crowding them (those
+     moved into the KJ menu's modals). Connected Displays still scrolls
+     internally if a venue has enough screens to need it. */
+  /* Not clipped like the other two columns (.kj-col sets overflow:hidden
+     above) — the expanded session panel floats past its bottom edge
+     (see .session-panel-body[open] below) and needs to not be cut off
+     by an ancestor's overflow:hidden. Each thing inside that can
+     actually grow unbounded (Connected Displays) already scrolls
+     itself, so this column doesn't need the safety clip. */
+  .kj-side { min-height: 0; overflow: visible; }
+  .crowd-preview { flex: 0 0 auto; }
+  .connected-displays { flex: 1 1 auto; min-height: 60px; display: flex; flex-direction: column; }
+  .connected-displays [data-connected-displays] { min-height: 0; overflow-y: auto; }
+  /* Expanding "Session & singer link" shouldn't be able to push its own
+     bottom (the QR code, "Start new") out of view, and it shouldn't
+     squash Connected Displays down to nothing either. A <details> body
+     doesn't reliably cooperate with being flex-shrunk by an ancestor
+     (Chromium keeps it at natural content height and lets it overflow
+     regardless of min-height:0/overflow-y:auto on the body itself), so
+     rather than fight that, it floats above the column instead of
+     pushing the flex layout around — the same trick a <select> dropdown
+     uses. It gets its own scroll + shadow and doesn't affect anyone
+     else's height. Opens upward (bottom:100%) because this panel sits
+     at the bottom of the column — anchoring below it would immediately
+     run into the viewport edge with nowhere to go.
+  */
+  .session-panel { flex: 0 0 auto; position: relative; }
+  .session-panel[open] .session-panel-body {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: 8px;
+    max-height: 340px;
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--surface) 92%, #14152e 8%);
+    border: 1px solid var(--kj-panel-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+    z-index: 30;
+  }
+}
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1500px) and (min-width: 1101px) {
