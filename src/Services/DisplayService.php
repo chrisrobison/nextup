@@ -109,6 +109,33 @@ final class DisplayService
         }
     }
 
+    /**
+     * Mute or unmute one or more screens. Separate from upsertScreen (the
+     * "Display Settings" form) on purpose — that form only ever submits
+     * label/layout/volume/show_qr/show_queue, and folding muted into the
+     * same upsert would silently reset it to whatever the form's default
+     * is on every unrelated settings save. This mirrors
+     * setPlaybackPaused's shape: a small, single-purpose live toggle the
+     * Connected Displays cards call directly.
+     *
+     * @param list<string> $screens
+     */
+    public static function setMuted(PDO $db, int $sessionId, array $screens, bool $muted): void
+    {
+        $update = $db->prepare('UPDATE display_screens SET muted = ? WHERE session_id = ? AND screen = ?');
+        // A screen can exist only as the synthesized default (see
+        // listScreens/defaultScreen) with no row yet — same guard as
+        // state()'s INSERT IGNORE, so toggling mute always has a row to
+        // land on.
+        $ensure = $db->prepare(
+            'INSERT IGNORE INTO display_screens (session_id, screen, label, muted) VALUES (?, ?, ?, ?)'
+        );
+        foreach (array_values(array_unique($screens)) as $screen) {
+            $ensure->execute([$sessionId, $screen, ucfirst($screen), $muted ? 1 : 0]);
+            $update->execute([$muted ? 1 : 0, $sessionId, $screen]);
+        }
+    }
+
     /** @param list<string> $screens */
     public static function setPlaybackPaused(PDO $db, int $sessionId, array $screens, bool $paused): void
     {
@@ -187,7 +214,7 @@ final class DisplayService
     public static function listScreens(PDO $db, int $sessionId): array
     {
         $stmt = $db->prepare(
-            'SELECT screen, label, layout, default_volume, show_qr, show_queue
+            'SELECT screen, label, layout, default_volume, muted, show_qr, show_queue
              FROM display_screens
              WHERE session_id = ?
              ORDER BY screen ASC'
@@ -266,6 +293,7 @@ final class DisplayService
             'label' => 'Main projector',
             'layout' => 'main',
             'default_volume' => 80,
+            'muted' => 1,
             'show_qr' => 1,
             'show_queue' => 1,
         ];

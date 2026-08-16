@@ -239,4 +239,34 @@ final class DisplayController
         );
         Response::json(['ok' => true, 'paused' => $paused, 'screen' => $screen]);
     }
+
+    /**
+     * Mute or unmute one screen or every screen. Same shape as pause():
+     * persist, then publish a generic EventBus event that display.js
+     * already has a delivery path for (WS push or short-poll fallback),
+     * no daemon changes required.
+     *
+     * @param array<string,mixed> $tenant @param array<string,mixed> $session
+     */
+    public static function mute(PDO $db, array $tenant, array $session): never
+    {
+        Auth::requireTenantRole('kj', 'tenant_admin');
+        $input = Request::input();
+        $screen = preg_replace('/[^a-z0-9_-]/i', '', (string)($input['screen'] ?? 'all')) ?: 'all';
+        $muted = !empty($input['muted']);
+        $targets = $screen === 'all'
+            ? array_map(
+                'strval',
+                array_column(DisplayService::listScreens($db, (int)$session['id']), 'screen'),
+            )
+            : [$screen];
+        DisplayService::setMuted($db, (int)$session['id'], $targets, $muted);
+        EventBus::publish(
+            $db,
+            $muted ? 'display:mute' : 'display:unmute',
+            ['screen' => $screen],
+            (int)$session['id'],
+        );
+        Response::json(['ok' => true, 'muted' => $muted, 'screen' => $screen]);
+    }
 }

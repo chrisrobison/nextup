@@ -35,10 +35,31 @@ const displayPlayer = {
   // this page's life, so every subsequent song can play with sound too —
   // not just the one active when the tap happened.
   audioUnlocked: false,
+  // KJ-controlled, independent of audioUnlocked: whether this screen
+  // *should* be audible once the browser gate above is satisfied.
+  // Starts true ("muted") so a display never blasts sound before either
+  // gate is explicitly lifted — applyDisplayConfiguration() overwrites
+  // this with the persisted per-screen value (display_screens.muted) as
+  // soon as the first /api/queue response arrives.
+  muted: true,
   defaultVolume: 80,
   synchronizedCommands: false,
   recoveredCommandId: null,
 };
+
+/**
+ * Whether the display should actually produce sound right now. Two
+ * independent gates both have to be open:
+ *  - audioUnlocked: the browser's autoplay-with-sound policy, satisfied
+ *    once per page life by a real tap on "Tap to enable sound".
+ *  - !muted: the KJ's own mute toggle (Connected Displays panel),
+ *    persisted per screen and defaulting to muted.
+ * Tapping the unlock overlay doesn't override an explicit KJ mute, and
+ * a KJ unmute doesn't bypass the browser gate — both are needed.
+ */
+function shouldBeAudible() {
+  return displayPlayer.audioUnlocked && !displayPlayer.muted;
+}
 
 /** Make cue/play-at commands the only path allowed to start display media. */
 export function enableSynchronizedPlayback() {
@@ -68,7 +89,14 @@ export function applyDisplayConfiguration(configuration = {}) {
   }
 
   displayPlayer.defaultVolume = Math.max(0, Math.min(100, Number(configuration.default_volume) || 0));
+  // Only overwrite from server truth when the field is actually present —
+  // screen() always returns it, but keep this defensive so a stale/partial
+  // configuration object can't accidentally unmute a screen.
+  if (configuration.muted !== undefined) {
+    displayPlayer.muted = Number(configuration.muted) === 1 || configuration.muted === true;
+  }
   applyPlayerVolume();
+  applyPlayerMuteState();
 }
 
 function applyPlayerVolume() {
@@ -77,6 +105,45 @@ function applyPlayerVolume() {
   }
   const video = $('[data-display-video]');
   if (video) video.volume = displayPlayer.defaultVolume / 100;
+}
+
+/** Reassert mute/unmute on whatever player is currently live, per
+ * shouldBeAudible(). Safe to call any time — no-ops if nothing's mounted. */
+function applyPlayerMuteState() {
+  const audible = shouldBeAudible();
+  if (displayPlayer.ytPlayer) {
+    try { audible ? displayPlayer.ytPlayer.unMute() : displayPlayer.ytPlayer.mute(); } catch (_) {}
+  }
+  const video = $('[data-display-video]');
+  if (video) video.muted = !audible;
+}
+
+/**
+ * KJ-driven mute/unmute (Connected Displays panel → display:mute /
+ * display:unmute event, see display.js). Independent of the browser's
+ * autoplay-unlock gesture — see shouldBeAudible().
+ *
+ * Muting is always a plain .mute()/video.muted=true — reliable in every
+ * browser. Unmuting a YouTube player is not: a player born with mute:1
+ * doesn't reliably honor a later postMessage unMute() (see
+ * unlockDisplayAudio's comment below), so when a KJ unmute actually
+ * makes the screen audible it goes through the same
+ * destroy-and-rebuild-unmuted trick as the local tap-to-enable gesture,
+ * not applyPlayerMuteState()'s plain .unMute().
+ */
+export function muteDisplayPlayer() {
+  displayPlayer.muted = true;
+  applyPlayerMuteState();
+}
+
+export function unmuteDisplayPlayer() {
+  displayPlayer.muted = false;
+  if (!shouldBeAudible()) return; // still waiting on this tab's own tap-to-enable gesture
+  if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
+    recreateYouTubePlayerUnmuted();
+  } else {
+    applyPlayerMuteState();
+  }
 }
 
 /* -------------------------------------------------------------- */
@@ -160,12 +227,12 @@ function buildYouTubePlayer(videoId) {
     videoId,
     playerVars: {
       autoplay: 0, controls: 0, modestbranding: 1, rel: 0, playsinline: 1,
-      mute: displayPlayer.audioUnlocked ? 0 : 1,
+      mute: shouldBeAudible() ? 0 : 1,
     },
     events: {
       onReady: e => {
         try {
-          if (displayPlayer.audioUnlocked) e.target.unMute(); else e.target.mute();
+          if (shouldBeAudible()) e.target.unMute(); else e.target.mute();
           e.target.setVolume(displayPlayer.defaultVolume);
           e.target.cueVideoById(videoId);
         } catch (_) {}
@@ -195,9 +262,16 @@ function buildYouTubePlayer(videoId) {
  * already creates its player unmuted-from-birth once audioUnlocked is
  * true (see cueDisplayPlayer/showYouTube), so this recreation is only
  * needed for whatever's already on screen at unlock time.
+ *
+ * This only satisfies the *browser's* gate. If the KJ has this screen
+ * muted (displayPlayer.muted — see muteDisplayPlayer/unmuteDisplayPlayer),
+ * the tap still registers (audioUnlocked flips true, so a later KJ
+ * unmute takes effect immediately without needing another tap) but
+ * doesn't itself make anything audible yet.
  */
 export function unlockDisplayAudio() {
   displayPlayer.audioUnlocked = true;
+  if (!shouldBeAudible()) return;
   if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
     recreateYouTubePlayerUnmuted();
   } else if (displayPlayer.provider === 'self_hosted') {
@@ -658,7 +732,7 @@ export function cueDisplayPlayer(videoInfo, onReady) {
         return;
       }
       try {
-        if (displayPlayer.audioUnlocked) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
+        if (shouldBeAudible()) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
         displayPlayer.ytPlayer.setVolume(displayPlayer.defaultVolume);
         displayPlayer.ytPlayer.cueVideoById(info.youtubeVideoId);
         // Re-cueing an existing player settles in UNSTARTED and does not
@@ -683,7 +757,7 @@ export function cueDisplayPlayer(videoInfo, onReady) {
     if (yt) yt.hidden = true;
     if (empty) empty.hidden = true;
     if (!v) { ready(); return; }
-    v.muted = !displayPlayer.audioUnlocked;
+    v.muted = !shouldBeAudible();
     v.volume = displayPlayer.defaultVolume / 100;
     v.preload = 'auto';
     if (v.getAttribute('src') !== src) v.setAttribute('src', src);
@@ -757,7 +831,7 @@ export function playDisplayPlayerAt(startAtServerMs, offsetSeconds = 0) {
 function startSyncedPlayback(offsetSeconds) {
   if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
     try {
-      if (displayPlayer.audioUnlocked) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
+      if (shouldBeAudible()) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
       displayPlayer.ytPlayer.setVolume(displayPlayer.defaultVolume);
       if (offsetSeconds > 0) displayPlayer.ytPlayer.seekTo(offsetSeconds, true);
       displayPlayer.ytPlayer.playVideo();
@@ -767,7 +841,7 @@ function startSyncedPlayback(offsetSeconds) {
   if (displayPlayer.provider === 'self_hosted') {
     const v = $('[data-display-video]');
     if (!v) return;
-    v.muted = !displayPlayer.audioUnlocked;
+    v.muted = !shouldBeAudible();
     v.volume = displayPlayer.defaultVolume / 100;
     try { if (offsetSeconds > 0) v.currentTime = offsetSeconds; } catch (_) {}
     v.play().catch(() => {});
@@ -865,7 +939,7 @@ export function resumeDisplayPlayer() {
   displayPlayer.pausedAtMs = null;
   if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
     try {
-      if (displayPlayer.audioUnlocked) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
+      if (shouldBeAudible()) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
       displayPlayer.ytPlayer.setVolume(displayPlayer.defaultVolume);
       displayPlayer.ytPlayer.playVideo();
     } catch (_) {}
@@ -874,7 +948,7 @@ export function resumeDisplayPlayer() {
   if (displayPlayer.provider === 'self_hosted') {
     const v = $('[data-display-video]');
     if (v) {
-      v.muted = !displayPlayer.audioUnlocked;
+      v.muted = !shouldBeAudible();
       v.volume = displayPlayer.defaultVolume / 100;
       v.play().catch(() => {});
     }
@@ -908,7 +982,7 @@ function showSelfHostedVideo(src) {
     v.setAttribute('src', src);
   }
   v.hidden = false;
-  v.muted = !displayPlayer.audioUnlocked;
+  v.muted = !shouldBeAudible();
   v.volume = displayPlayer.defaultVolume / 100;
   v.play().catch(() => {});
 }
@@ -936,11 +1010,11 @@ function showYouTube(videoId) {
         // Muted-by-default until a real tap unlocks audio (see
         // unlockDisplayAudio) — that's what keeps autoplay/loadVideoById
         // reliably allowed before the gesture happens.
-        playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, playsinline: 1, mute: displayPlayer.audioUnlocked ? 0 : 1 },
+        playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, playsinline: 1, mute: shouldBeAudible() ? 0 : 1 },
         events: {
           onReady: e => {
             try {
-              if (displayPlayer.audioUnlocked) e.target.unMute(); else e.target.mute();
+              if (shouldBeAudible()) e.target.unMute(); else e.target.mute();
               e.target.setVolume(displayPlayer.defaultVolume);
               e.target.playVideo();
             } catch (_) {}
@@ -961,7 +1035,7 @@ function showYouTube(videoId) {
       try {
         const state = displayPlayer.ytPlayer.getPlayerState();
         if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
-          if (displayPlayer.audioUnlocked) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
+          if (shouldBeAudible()) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
           displayPlayer.ytPlayer.setVolume(displayPlayer.defaultVolume);
           displayPlayer.ytPlayer.playVideo();
         }
@@ -970,7 +1044,7 @@ function showYouTube(videoId) {
     }
 
     try {
-      if (displayPlayer.audioUnlocked) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
+      if (shouldBeAudible()) displayPlayer.ytPlayer.unMute(); else displayPlayer.ytPlayer.mute();
       displayPlayer.ytPlayer.setVolume(displayPlayer.defaultVolume);
     } catch (_) {}
     displayPlayer.ytPlayer.loadVideoById(videoId);

@@ -18,6 +18,8 @@ import {
   pauseDisplayPlayer,
   resumeDisplayPlayer,
   unlockDisplayAudio,
+  muteDisplayPlayer,
+  unmuteDisplayPlayer,
   enableSynchronizedPlayback,
   recoverDisplayPlayback,
 } from '../lib/queue.js';
@@ -67,6 +69,8 @@ export function init() {
       if (screen !== 'all' && screen !== appConfig.screen) continue;
       if (e.event_name === 'display:pause') pauseDisplayPlayer();
       if (e.event_name === 'display:resume') resumeDisplayPlayer();
+      if (e.event_name === 'display:mute') muteDisplayPlayer();
+      if (e.event_name === 'display:unmute') unmuteDisplayPlayer();
       // With WebSockets, typed cue/play-at messages follow the generic event
       // and are handled below. Polling has no typed channel, so translate the
       // same persisted events here.

@@ -80,6 +80,10 @@ function renderConnectedDisplays(screens) {
   container.innerHTML = screens.map(s => {
     const info = displayPresence.get(s.screen);
     const online = info && (now - info.lastSeen) < 15000;
+    // Screens start muted (display_screens.muted defaults to 1) so a
+    // remote/auxiliary display never produces sound before the KJ
+    // decides it should — see queue.js's shouldBeAudible().
+    const muted = Number(s.muted) === 1 || s.muted === true;
     return `
     <article class="display-card" data-screen-card="${escapeHtml(s.screen)}">
       <div class="display-card-head">
@@ -90,6 +94,7 @@ function renderConnectedDisplays(screens) {
       <div class="display-card-actions">
         <button type="button" data-mirror="${escapeHtml(s.screen)}">⧉ Mirror</button>
         <button type="button" data-message-screen="${escapeHtml(s.screen)}">✉ Message</button>
+        <button type="button" class="mute-toggle" data-mute-screen="${escapeHtml(s.screen)}" data-muted="${muted ? 1 : 0}" title="${muted ? 'Unmute this display' : 'Mute this display'}">${muted ? '🔇 Unmute' : '🔊 Mute'}</button>
         <button type="button" data-blackout-screen="${escapeHtml(s.screen)}">⛔ Blackout</button>
         <select data-content-screen="${escapeHtml(s.screen)}" title="Set content">
           ${CONTENT_MODES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
@@ -606,6 +611,14 @@ export function init() {
     const blackoutScreen = event.target.closest('[data-blackout-screen]');
     if (blackoutScreen) {
       await api('/api/display/state', { method: 'POST', body: JSON.stringify({ mode: 'blackout', screen: blackoutScreen.dataset.blackoutScreen }) });
+      return;
+    }
+
+    const muteScreen = event.target.closest('[data-mute-screen]');
+    if (muteScreen) {
+      const nowMuted = muteScreen.dataset.muted === '1';
+      await api('/api/display/mute', { method: 'POST', body: JSON.stringify({ screen: muteScreen.dataset.muteScreen, muted: !nowMuted }) });
+      await loadDisplayScreens();
       return;
     }
 

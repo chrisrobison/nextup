@@ -385,6 +385,11 @@
 .display-card-actions button, .display-card-actions select { width: auto; padding: 6px 10px; font-size: 12px; border-radius: 7px; }
 .display-card-actions button[data-message-screen] { background: rgba(59, 111, 224, .16); border-color: rgba(59, 111, 224, .5); color: #a9c3ff; }
 .display-card-actions button[data-blackout-screen] { background: rgba(110, 36, 48, .35); border-color: var(--kj-maroon); color: #ffb2bd; }
+/* Muted (the default/safe state) reads as a quiet, neutral pill; unmuted
+ * — this screen is actually making noise — gets an amber tint so it
+ * stands out from the rest of the row at a glance. */
+.mute-toggle[data-muted="1"] { color: var(--muted); }
+.mute-toggle[data-muted="0"] { background: rgba(245, 185, 63, .18); border-color: rgba(245, 185, 63, .55); color: var(--chip-vip); }
 
 /* ---------- Announcement + activity ----------
  * Both now live in [data-announcement-modal]/[data-activity-modal]

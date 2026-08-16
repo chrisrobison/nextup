@@ -336,6 +336,7 @@ try {
         (bool)preg_match('#^/api/display/screens/([a-z0-9_-]+)$#', $path, $m) && $method === 'DELETE' => DisplayController::deleteScreen($db, $tenant, $session, $m[1]),
         $path === '/api/display/play' && $method === 'POST' => DisplayController::triggerPlay($db, $tenant, $session),
         $path === '/api/display/pause' && $method === 'POST' => DisplayController::pause($db, $tenant, $session),
+        $path === '/api/display/mute' && $method === 'POST' => DisplayController::mute($db, $tenant, $session),
         $path === '/api/announcements' && $method === 'POST' => DisplayController::announce($db, $tenant, $session),
         $path === '/api/admin/activity' && $method === 'GET' => ActivityController::index($db, $tenant, $session),
         $path === '/api/events' && $method === 'GET' => QueueController::events($db, (int)$session['id']),
