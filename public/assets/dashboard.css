@@ -2,18 +2,46 @@
  * Loaded after app.css; reuses its tokens (--bg/--surface/--border/--text/
  * --muted/--primary/--accent/--ok/--warning/--danger) so tenant branding
  * still propagates. Adds a few fixed semantic colors for badges/status
- * dots that shouldn't shift with a tenant's brand color.
+ * dots/action buttons that shouldn't shift with a tenant's brand color —
+ * this is the KJ's operator cockpit, not a tenant-branded page the way
+ * the request/songs/display pages are, so it leans into its own consistent
+ * "night show" palette (indigo/violet) rather than the tenant's colors.
+ * Panel surfaces still blend in the tenant's --surface/--bg via color-mix()
+ * so a tenant's dark theme still reads through, it's just tinted.
  */
 
 :root {
   --chip-vip: #f5b93f;
   --chip-duo: #a78bfa;
-  --chip-new: #34d0c6;
+  --chip-new: #4a8dfb;
   --status-online: #22c55e;
   --status-offline: #6b7280;
+
+  /* Fixed "night show" accents — deliberately not tenant-configurable. */
+  --kj-violet: #7c5cd6;
+  --kj-violet-text: #f1ecff;
+  --kj-blue: #3b6fe0;
+  --kj-blue-text: #eaf1ff;
+  --kj-amber: #8a5228;
+  --kj-amber-text: #ffdcb8;
+  --kj-maroon: #6e2430;
+  --kj-maroon-text: #ffcdd4;
+  --kj-glow-violet: rgba(124, 92, 214, .22);
+  --kj-glow-blue: rgba(59, 111, 224, .16);
+  --kj-panel-border: rgba(148, 130, 255, .16);
 }
 
-.kj-console { display: flex; flex-direction: column; gap: 16px; }
+.kj-console {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  border-radius: 16px;
+  background:
+    radial-gradient(1100px 420px at 10% -8%, var(--kj-glow-violet), transparent 60%),
+    radial-gradient(900px 380px at 100% -4%, var(--kj-glow-blue), transparent 55%),
+    var(--bg);
+}
 
 /* ---------- Operator alerts ----------
  * Server-side conditions the KJ must act on (schema drift, degraded
@@ -22,9 +50,9 @@
  */
 .kj-alert {
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 80%, #12132a 20%);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -66,24 +94,58 @@
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 78%, #14152e 22%);
+  border: 1px solid var(--kj-panel-border);
+  border-radius: 12px;
   padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(4, 4, 16, .28);
 }
 .kj-toolbar-search { flex: 1 1 220px; min-width: 180px; }
-.kj-toolbar-search input { margin: 0; }
+.kj-toolbar-search input {
+  margin: 0;
+  padding-left: 38px;
+  background-color: #0b0c17;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a7b0c0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px center;
+}
 .kj-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.kj-toolbar-actions button { width: auto; padding: 10px 14px; white-space: nowrap; }
-.kj-toolbar-actions button.ok { background: var(--ok); border-color: var(--ok); color: #07100d; }
-.kj-toolbar-actions button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.kj-toolbar-actions button { width: auto; padding: 10px 14px; white-space: nowrap; border-radius: 8px; }
+
+/* Start Song: blue. Distinct from Add Request's tenant-brand primary and
+ * from the semantic --ok green used for accept/online states elsewhere. */
+.kj-toolbar-actions button.ok {
+  background: var(--kj-blue);
+  border-color: var(--kj-blue);
+  color: var(--kj-blue-text);
+}
+/* Skip: violet — the console's recurring "secondary action" accent,
+ * reused below for the mini-player transport and Send Announcement. */
+.kj-toolbar-actions button[data-skip-song] {
+  background: var(--kj-violet);
+  border-color: var(--kj-violet);
+  color: var(--kj-violet-text);
+}
+/* Announce: amber. */
+.kj-toolbar-actions button[data-quick-announce] {
+  background: var(--kj-amber);
+  border-color: var(--kj-amber);
+  color: var(--kj-amber-text);
+}
+/* Blackout Displays: solid maroon rather than an outline — it's the one
+ * action that takes every screen dark, it should read as heavy, not tentative. */
+.kj-toolbar-actions button.danger {
+  background: var(--kj-maroon);
+  border-color: var(--kj-maroon);
+  color: var(--kj-maroon-text);
+}
 .kj-toolbar-actions button[data-paused="1"] { background: var(--accent); border-color: var(--accent); color: #201a03; }
 .kj-toolbar-meta { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .kj-displays-connected { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .kj-displays-connected strong { color: var(--text); }
 
 .kj-menu { position: relative; }
-.kj-menu > summary { list-style: none; cursor: pointer; padding: 10px 14px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); width: auto; font-weight: 700; }
+.kj-menu > summary { list-style: none; cursor: pointer; padding: 10px 14px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); width: auto; font-weight: 700; }
 .kj-menu > summary::-webkit-details-marker { display: none; }
 .kj-menu > summary::after { content: ' ▾'; }
 .kj-menu[open] > summary::after { content: ' ▴'; }
@@ -91,8 +153,23 @@
 .kj-menu-panel a { padding: 8px 10px; border-radius: 6px; color: var(--text); }
 .kj-menu-panel a:hover { background: var(--surface-2); }
 
-/* ---------- Stat tiles ---------- */
-.admin-stats { grid-template-columns: repeat(5, minmax(90px, 1fr)); }
+/* ---------- Stat tiles ----------
+ * The mockup folds these counts into panel-header badges instead of a
+ * dedicated strip (this dashboard already has those badges too — see
+ * .count-badge below). Rather than dropping the extra at-a-glance counts
+ * (up next / now singing / completed have no badge home of their own),
+ * this keeps the strip but shrinks it to a slim ticker so it doesn't
+ * compete with the toolbar for visual weight.
+ */
+.admin-stats { grid-template-columns: repeat(5, minmax(90px, 1fr)); gap: 8px; }
+.kj-console .stat-tile {
+  background: color-mix(in srgb, var(--surface) 78%, #14152e 22%);
+  border: 1px solid var(--kj-panel-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.kj-console .stat-tile .stat-value { font-size: 20px; }
+.kj-console .stat-tile .stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 
 /* ---------- Three-column body ---------- */
 .kj-columns {
@@ -103,16 +180,33 @@
 }
 .kj-col { display: flex; flex-direction: column; gap: 16px; }
 
+.kj-console .panel {
+  background: color-mix(in srgb, var(--surface) 78%, #14152e 22%);
+  border: 1px solid var(--kj-panel-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(4, 4, 16, .22);
+}
+
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-.panel-head h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .04em; margin: 0; display: flex; align-items: center; gap: 8px; }
+.panel-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 0; display: flex; align-items: center; gap: 8px; color: #c7b8ff; font-weight: 800; }
 .panel-head-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-.panel-head-meta button { width: auto; padding: 7px 10px; font-size: 12px; }
-.count-badge { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; }
+.panel-head-meta button { width: auto; padding: 7px 10px; font-size: 12px; border-radius: 7px; }
+.count-badge { background: var(--kj-violet); border: 1px solid var(--kj-violet); color: var(--kj-violet-text); font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; }
 
 /* ---------- Incoming requests ---------- */
 .kj-incoming { max-height: 78vh; display: flex; flex-direction: column; }
 .incoming-list { display: grid; gap: 10px; overflow-y: auto; padding-right: 2px; }
-.incoming-item { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.incoming-item {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--kj-violet);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.incoming-item:has(.chip-vip) { border-left-color: var(--chip-vip); }
+.incoming-item:has(.chip-new) { border-left-color: var(--chip-new); }
 .incoming-item-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .incoming-name { flex: 1 1 auto; }
 .incoming-time { color: var(--muted); font-size: 12px; white-space: nowrap; }
@@ -123,59 +217,139 @@
 .icon-btn.ok { background: rgba(34,197,94,.15); border-color: var(--ok); color: #6ee7a7; }
 .icon-btn.danger { background: rgba(239,68,68,.12); border-color: var(--danger); color: #fca5a5; }
 .auto-accept-row { display: flex; align-items: center; gap: 8px; width: auto; color: var(--muted); font-size: 13px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.auto-accept-row input { width: auto; }
-.settings-gear { margin-left: auto; color: var(--muted); font-size: 16px; }
+/* Checkbox restyled as a toggle switch — same input, no markup change. */
+.auto-accept-row input[type="checkbox"] {
+  appearance: none;
+  width: 34px;
+  height: 19px;
+  padding: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background .15s ease, border-color .15s ease;
+}
+.auto-accept-row input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .15s ease, background .15s ease;
+}
+.auto-accept-row input[type="checkbox"]:checked { background: var(--kj-violet); border-color: var(--kj-violet); }
+.auto-accept-row input[type="checkbox"]:checked::before { transform: translateX(15px); background: #fff; }
+.settings-gear { margin-left: auto; color: var(--muted); font-size: 13px; }
+.settings-gear:hover { color: var(--text); }
 
 /* ---------- Badges / chips ---------- */
 .chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 800; letter-spacing: .03em; border-radius: 999px; padding: 2px 8px; text-transform: uppercase; }
 .chip-vip { background: rgba(245, 185, 63, .18); color: var(--chip-vip); border: 1px solid rgba(245, 185, 63, .5); }
 .chip-duo { background: rgba(167, 139, 250, .18); color: var(--chip-duo); border: 1px solid rgba(167, 139, 250, .5); }
-.chip-new { background: rgba(52, 208, 198, .16); color: var(--chip-new); border: 1px solid rgba(52, 208, 198, .5); }
+.chip-new { background: rgba(74, 141, 251, .18); color: var(--chip-new); border: 1px solid rgba(74, 141, 251, .5); }
 .chip-live { background: rgba(34, 197, 94, .18); color: #6ee7a7; border: 1px solid rgba(34, 197, 94, .5); }
-.chip-next { background: rgba(245, 158, 11, .16); color: #fcd34d; border: 1px solid rgba(245, 158, 11, .5); }
+.chip-next { background: rgba(59, 111, 224, .18); color: #a9c3ff; border: 1px solid rgba(59, 111, 224, .5); }
 
 /* ---------- Rotation queue ---------- */
 .kj-rotation { display: flex; flex-direction: column; }
-.kj-rotation .queue-board { max-height: 56vh; overflow-y: auto; padding-right: 2px; }
+.kj-rotation .queue-board { max-height: 56vh; overflow-y: auto; padding-right: 2px; display: grid; gap: 2px; }
 .queue-item {
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
+  padding: 8px 8px;
+  border-radius: 8px;
 }
+.kj-rotation .queue-board > .queue-item:nth-child(even) { background: rgba(255, 255, 255, .02); }
+.kj-rotation .queue-board > .queue-item:hover { background: rgba(124, 92, 214, .08); }
 .queue-item-drag { cursor: grab; color: var(--muted); font-size: 16px; }
-.queue-item-pos { font-weight: 800; color: var(--muted); min-width: 1.4em; text-align: center; }
+.queue-item-pos {
+  font-weight: 800;
+  color: var(--muted);
+  min-width: 1.6em;
+  text-align: center;
+  background: rgba(255, 255, 255, .05);
+  border-radius: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+}
 .queue-item-body { display: grid; gap: 2px; min-width: 0; }
 .queue-item-singer-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .queue-item-song { margin: 0; }
-.queue-item.status-now_singing { background: linear-gradient(90deg, rgba(34,197,94,.10), transparent 60%); }
+.queue-item.status-now_singing {
+  background: linear-gradient(90deg, rgba(124,92,214,.30), rgba(59,111,224,.10) 70%);
+  box-shadow: inset 0 0 0 1px var(--kj-violet);
+}
+.queue-item.status-up_next {
+  background: rgba(59, 111, 224, .08);
+  box-shadow: inset 0 0 0 1px rgba(59, 111, 224, .5);
+}
 .queue-item-menu { position: relative; }
-.queue-item-menu > summary { list-style: none; cursor: pointer; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 18px; }
+.queue-item-menu > summary { list-style: none; cursor: pointer; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); font-size: 18px; }
 .queue-item-menu > summary::-webkit-details-marker { display: none; }
 .queue-item-menu-panel { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: grid; gap: 6px; min-width: 170px; z-index: 15; }
 .queue-item-menu-panel button { width: 100%; }
 .rotation-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; }
-.reorder-mode .queue-item-drag { color: var(--accent); }
+.reorder-mode .queue-item-drag { color: var(--kj-violet); }
+[data-reorder-mode][aria-pressed="true"], [data-reorder-mode].active { background: var(--kj-violet); border-color: var(--kj-violet); color: var(--kj-violet-text); }
 
 /* ---------- Now playing ---------- */
 .now-playing { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.now-playing-art { width: 56px; height: 56px; border-radius: 8px; background: var(--surface-2); display: grid; place-items: center; font-size: 26px; flex: 0 0 auto; }
+.now-playing-art {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6f8dff, #2a2f8f 70%);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 3px rgba(124, 92, 214, .18), 0 6px 16px rgba(0,0,0,.35);
+}
 .now-playing-info { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
 .now-playing-info strong { font-size: 17px; }
 .now-playing-transport { display: flex; align-items: center; gap: 8px; }
-.now-playing-transport button { width: auto; padding: 10px 14px; border-radius: 999px; }
+.now-playing-transport button {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--kj-violet);
+  border-color: var(--kj-violet);
+  color: var(--kj-violet-text);
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+}
 .now-playing-elapsed { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.5em; }
 
 /* ---------- Crowd preview ---------- */
-.live-dot { color: var(--ok); font-size: 12px; font-weight: 800; }
+.live-dot {
+  color: #6ee7a7;
+  background: rgba(34, 197, 94, .14);
+  border: 1px solid rgba(34, 197, 94, .4);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
 .crowd-preview-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 10px;
+  border: 1px solid var(--kj-panel-border);
   background: #000;
+  box-shadow: 0 0 0 1px rgba(124, 92, 214, .12), 0 8px 20px rgba(0,0,0,.4);
 }
 /* The live display page is a full-size 1280x720 layout; scale it down into
    the thumbnail frame rather than re-implementing a second renderer. The
@@ -199,20 +373,33 @@
 
 /* ---------- Connected displays ---------- */
 .connected-displays > div { display: grid; gap: 10px; }
-.display-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.display-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
 .display-card-head { display: flex; align-items: center; gap: 8px; }
+.display-card-head strong::before { content: '🖥 '; }
 .display-card-layout { margin-left: auto; text-transform: capitalize; font-size: 12px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .status-dot.online { background: var(--status-online); box-shadow: 0 0 6px var(--status-online); }
 .status-dot.offline { background: var(--status-offline); }
 .display-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.display-card-actions button, .display-card-actions select { width: auto; padding: 6px 10px; font-size: 12px; }
+.display-card-actions button, .display-card-actions select { width: auto; padding: 6px 10px; font-size: 12px; border-radius: 7px; }
+.display-card-actions button[data-message-screen] { background: rgba(59, 111, 224, .16); border-color: rgba(59, 111, 224, .5); color: #a9c3ff; }
+.display-card-actions button[data-blackout-screen] { background: rgba(110, 36, 48, .35); border-color: var(--kj-maroon); color: #ffb2bd; }
 
 /* ---------- Announcement + activity ---------- */
 .announcement-panel textarea { margin-bottom: 8px; resize: vertical; }
+.announcement-panel button.primary { background: var(--kj-violet); border-color: var(--kj-violet); color: var(--kj-violet-text); }
+.announcement-actions { display: flex; align-items: center; gap: 10px; }
+.announcement-actions button { flex: 1 1 auto; }
+.announcement-count { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-log > div { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
-.activity-row { display: grid; grid-template-columns: 60px 1fr; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.activity-row { display: grid; grid-template-columns: 10px 60px 1fr; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .activity-row time { color: var(--muted); white-space: nowrap; }
+.activity-dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; background: var(--muted); }
+.activity-dot-new { background: var(--danger); }
+.activity-dot-live { background: var(--ok); }
+.activity-dot-move { background: var(--kj-blue); }
+.activity-dot-announce { background: var(--kj-violet); }
+.activity-dot-display { background: var(--chip-new); }
 
 /* ---------- Session / QR (collapsed by default) ---------- */
 .session-panel { padding: 14px 16px; }
@@ -238,16 +425,18 @@
 
 /* ---------- Add Request modal ---------- */
 .add-request-modal {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  border: 1px solid var(--kj-panel-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, #14152e 18%);
   color: var(--text);
   padding: 20px;
   width: min(480px, 92vw);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
 }
 .add-request-modal::backdrop { background: rgba(4, 6, 10, .72); }
 .add-request-modal form { display: grid; gap: 12px; }
 .add-request-modal .song-results { max-height: 220px; overflow-y: auto; }
+.add-request-modal button.primary { background: var(--primary); border-color: var(--primary); }
 
 /* Confirmation that a song was actually chosen. The search box changing
  * text was the only prior feedback, which read as "nothing happened". */

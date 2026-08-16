@@ -254,6 +254,19 @@ function tickNowPlayingElapsed() {
 /* Activity log                                                    */
 /* -------------------------------------------------------------- */
 
+/** Maps a realtime_events event_name (already returned by the API — see
+ * ActivityController::VISIBLE) to a fixed dot color so the log reads at a
+ * glance instead of as a wall of identical rows. Purely presentational:
+ * derived from the real event type, nothing fabricated. */
+function activityDotClass(event, message) {
+  if (event === 'request:created') return 'activity-dot-new';
+  if (event === 'request:status_changed' && /started singing/.test(message)) return 'activity-dot-live';
+  if (event === 'request:approved') return 'activity-dot-move';
+  if (event === 'announcement:shown') return 'activity-dot-announce';
+  if (event === 'display:state_changed') return 'activity-dot-display';
+  return 'activity-dot-default';
+}
+
 async function loadActivity() {
   const container = $('[data-activity-log]');
   if (!container) return;
@@ -261,6 +274,7 @@ async function loadActivity() {
     const { activity = [] } = await api('/api/admin/activity?limit=30');
     container.innerHTML = activity.map(item => `
       <div class="activity-row">
+        <span class="activity-dot ${activityDotClass(item.event, item.message)}"></span>
         <time>${escapeHtml(new Date(String(item.created_at).replace(' ', 'T')).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time>
         <span>${escapeHtml(item.message)}</span>
       </div>
@@ -608,12 +622,22 @@ export function init() {
   });
 
   // Announcements.
-  $('[data-announcement-form]')?.addEventListener('submit', async event => {
+  const announcementForm = $('[data-announcement-form]');
+  const announcementTextarea = announcementForm ? $('textarea[name="message"]', announcementForm) : null;
+  const announcementCount = $('[data-announcement-count]');
+  const syncAnnouncementCount = () => {
+    if (!announcementCount || !announcementTextarea) return;
+    announcementCount.textContent = `${announcementTextarea.value.length} / ${announcementTextarea.maxLength}`;
+  };
+  announcementTextarea?.addEventListener('input', syncAnnouncementCount);
+  syncAnnouncementCount();
+  announcementForm?.addEventListener('submit', async event => {
     event.preventDefault();
     const data = formData(event.target);
     if (!data.message || !data.message.trim()) return;
     await api('/api/announcements', { method: 'POST', body: JSON.stringify({ message: data.message.trim(), screen: 'all' }) });
     event.target.reset();
+    syncAnnouncementCount();
     loadActivity();
   });
 

@@ -95,7 +95,7 @@ $dashboardQr = QrCode::svg($singerUrl, 96);
         <div class="incoming-list" data-incoming-requests><p class="muted">No new requests.</p></div>
         <label class="auto-accept-row">
           <input type="checkbox" data-auto-accept> Auto-accept
-          <a href="<?= e(Url::path('/admin/settings')) ?>" class="settings-gear" title="More settings">⚙</a>
+          <a href="<?= e(Url::path('/admin/settings')) ?>" class="settings-gear" title="More settings">Settings ⚙</a>
         </label>
       </section>
 
@@ -149,7 +149,10 @@ $dashboardQr = QrCode::svg($singerUrl, 96);
           <h2>Announcement to Displays</h2>
           <form data-announcement-form>
             <textarea name="message" maxlength="500" placeholder="Welcome! Thanks for joining us tonight." rows="2"></textarea>
-            <button class="primary">Send Announcement</button>
+            <div class="announcement-actions">
+              <button class="primary">📣 Send Announcement</button>
+              <span class="announcement-count" data-announcement-count>0 / 500</span>
+            </div>
           </form>
         </div>
 
