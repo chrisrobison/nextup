@@ -508,21 +508,30 @@
 .modal-actions button { width: auto; padding: 10px 16px; }
 
 /* ---------- Fixed "desktop app" shell (no page-level scrolling) ----------
- * Below 1101px the columns stack into one flow (see the max-width:1100px
- * block below) and the page scrolls normally — right for phone/tablet.
- * Between 1101–1500px .kj-side wraps onto its own second row (see the
- * max-width:1500px block below) so it still needs natural page scroll —
- * forcing the columns row to a single fixed-height track there would
- * clip whatever didn't fit. Only at 1501px+, where .kj-columns is back
- * to one clean 3-column row, does it make sense to pin the shell
- * (topbar + sidebar + dashboard) to the viewport and let each panel
- * that can grow unbounded (incoming requests, rotation queue, connected
- * displays) scroll internally instead of pushing the whole page down.
+ * Below 1240px the columns stack into one flow (see the max-width:1239px
+ * block below) and the page scrolls normally — right for phone/tablet,
+ * where there isn't room to make three independently-scrolling columns
+ * usable anyway.
+ *
+ * 1240px is a measured number, not a guess: the sidebar (220px) + the
+ * console's own padding (2×20px) + the three columns' minmax floors
+ * (260/380/300px + 2×16px gaps = 972px) need exactly 1232px before the
+ * columns stop clipping (verified by comparing .kj-columns' scrollWidth
+ * to its clientWidth across a range of widths); 1240px adds a small
+ * margin. That comfortably covers 1366px-and-up laptops — the common
+ * case for "runs this as a semi-permanent console all night" — without
+ * mattering how a narrower window gets handled below it.
+ * There used to be a separate "2 columns, .kj-side wraps to its own
+ * row" layout for 1101–1500px; it added a second grid row with its own
+ * height-distribution problem for marginal benefit, so it's gone —
+ * every width above the fits-without-clipping threshold now gets the
+ * same single-row 3-column layout, all scrolling internally the same
+ * way.
  * Scoped to body.admin-dashboard (dashboard.css only loads on this page
  * anyway) so no other admin-* page is affected — they don't have
  * internal scroll regions built for this yet.
  */
-@media (min-width: 1501px) {
+@media (min-width: 1240px) {
   body.admin-dashboard {
     height: 100dvh;
     overflow: hidden;
@@ -625,18 +634,14 @@
   }
 }
 
-/* ---------- Responsive ---------- */
-@media (max-width: 1500px) and (min-width: 1101px) {
-  .kj-columns { grid-template-columns: minmax(260px, 34%) minmax(420px, 1fr); }
-  .kj-side {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
-  .kj-side .session-panel { grid-column: 1 / -1; }
-}
-@media (max-width: 1100px) {
+/* ---------- Responsive ----------
+ * Matches the fixed-shell cutoff above (1240px) exactly, so there's no
+ * gap width where the columns are neither stacked nor fixed-shelled —
+ * that gap used to clip the third column (see the shell block's
+ * comment for the measured 1232px floor this stacking threshold sits
+ * just above).
+ */
+@media (max-width: 1239px) {
   .kj-columns { grid-template-columns: 1fr; }
   .kj-side { display: flex; }
   .kj-incoming, .kj-rotation .queue-board { max-height: none; }

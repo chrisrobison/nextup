@@ -570,8 +570,12 @@ export function init() {
     if (event.target.closest('[data-toggle-pause], [data-np-pause]')) { await togglePause(); return; }
     if (event.target.closest('[data-blackout-all]')) { await blackoutAllDisplays(); return; }
     if (event.target.closest('[data-quick-announce]')) {
-      $('[data-announcement-form] textarea')?.focus();
-      $('[data-announcement-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // The announcement form moved into a modal (see [data-open-announcement]
+      // in the KJ menu) — this toolbar button is the other, more prominent
+      // entry point to the same dialog. Focusing/scrolling to it made sense
+      // when the form sat permanently in column 3; now it has to actually
+      // open first.
+      openAnnouncementModal();
       return;
     }
     const reorderMode = event.target.closest('[data-reorder-mode]');
