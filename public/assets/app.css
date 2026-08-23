@@ -187,30 +187,37 @@ h1, h2, p { margin-top: 0; }
   background-position: center;
 }
 
-/* Tap-to-unlock-sound gate. Covers the whole screen until tapped; hidden
-   via [hidden] once display.js confirms the click landed. Everything
-   plays muted until then — see queue.js's audioUnlocked flag. */
+/* Tap-to-unlock-sound affordance. A small non-blocking corner pill, not a
+   full-screen gate — an unattended remote/bar/patio TV that nobody ever
+   walks up to tap should still show its video and queue normally (they
+   already play muted by default — see queue.js's `muted` flag). The pill
+   just banks the browser's required user-gesture for *unmuted* playback
+   ahead of time, in case the KJ unmutes this screen later; display.js also
+   treats any tap/click anywhere on the page as that gesture, so this is a
+   secondary, visible target rather than the only way to satisfy it. Hidden
+   via [hidden] once display.js confirms a gesture landed. */
 .display-audio-unlock {
   position: fixed;
-  inset: 0;
+  right: 16px;
+  bottom: 16px;
   z-index: 50;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: rgba(4, 6, 10, .82);
+  gap: 8px;
+  width: auto;
+  height: auto;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  background: rgba(4, 6, 10, .72);
   color: var(--text);
-  font-size: clamp(18px, 2.4vw, 30px);
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
 }
 .display-audio-unlock[hidden] { display: none; }
-.display-audio-unlock-icon { font-size: clamp(48px, 8vw, 96px); }
+.display-audio-unlock-icon { font-size: 18px; }
 
 /* --- Stage (left column) --- */
 .display-stage {

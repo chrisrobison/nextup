@@ -46,15 +46,26 @@ export function init() {
   setScheduler(scheduleAtServerTime);
   enableSynchronizedPlayback();
 
-  // Sound is muted until this real click/tap happens — required by every
-  // browser's autoplay policy. Once unlocked it stays unlocked for the
-  // rest of this page's life (until reloaded), so this only needs to fire
-  // once per display session.
+  // Sound stays muted until a real click/tap happens somewhere on the page
+  // — required by every browser's autoplay-with-sound policy. Once
+  // unlocked it stays unlocked for the rest of this page's life (until
+  // reloaded), so this only needs to fire once per display session. The
+  // pill button is a visible target for it, but an unattended remote/bar
+  // TV should never be blocked by a full-screen gate waiting for someone
+  // to specifically hit that button — any tap/click anywhere on the
+  // display (the video, the queue, the background) satisfies the same
+  // browser requirement, so listen for that too and dismiss the pill.
+  // Bound on document (not just the pill) — a click on the button bubbles
+  // up and is caught here too, so one listener covers both cases.
   const audioUnlockButton = document.querySelector('[data-display-audio-unlock]');
-  audioUnlockButton?.addEventListener('click', () => {
+  const handleUnlockGesture = () => {
     unlockDisplayAudio();
-    audioUnlockButton.hidden = true;
-  });
+    if (audioUnlockButton) audioUnlockButton.hidden = true;
+    document.removeEventListener('click', handleUnlockGesture);
+    document.removeEventListener('touchend', handleUnlockGesture);
+  };
+  document.addEventListener('click', handleUnlockGesture);
+  document.addEventListener('touchend', handleUnlockGesture);
 
   // BroadcastChannel listener (same-browser fast path — unchanged).
   startDisplayBroadcastListener();

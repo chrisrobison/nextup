@@ -16,10 +16,12 @@ $requestQr = QrCode::svg($requestUrl, 320);
        the KJ decides it should have any, e.g. a screen in a separate
        room with its own speakers. Independently of that KJ-controlled
        toggle, browsers also block unmuted autoplay until the page has
-       had a real user gesture — so whoever sets a physical display up
-       still has to tap this once; it unlocks sound for every song for
-       the rest of this page's life (until it's reloaded), and a later
-       KJ unmute takes effect immediately without needing another tap. -->
+       had a real user gesture, so this small pill (or any tap/click on
+       the page — see display.js) banks that gesture ahead of time; a
+       later KJ unmute then takes effect immediately without needing
+       anyone to be standing in front of the screen. It's deliberately
+       non-blocking: an unattended display still shows video and queue
+       normally while muted, instead of being hidden behind a gate. -->
   <button type="button" class="display-audio-unlock" data-display-audio-unlock>
     <span class="display-audio-unlock-icon">🔊</span>
     <span>Tap to enable sound</span>
