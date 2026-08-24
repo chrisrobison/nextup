@@ -15,6 +15,7 @@ import {
   playDisplayPlayerAt,
   getDisplayPlayerStatus,
   setScheduler,
+  setServerNow,
   pauseDisplayPlayer,
   resumeDisplayPlayer,
   unlockDisplayAudio,
@@ -24,7 +25,7 @@ import {
   recoverDisplayPlayback,
 } from '../lib/queue.js';
 import { broadcast } from '../lib/broadcast.js';
-import { startRealtime, sendDisplayReady, sendDisplayStatus, onMessage, scheduleAtServerTime, isConnected } from '../lib/ws.js';
+import { startRealtime, sendDisplayReady, sendDisplayStatus, onMessage, scheduleAtServerTime, getServerNowMs, isConnected } from '../lib/ws.js';
 
 function startDisplayBroadcastListener() {
   broadcast.subscribe(async data => {
@@ -42,8 +43,11 @@ function startDisplayBroadcastListener() {
 }
 
 export function init() {
-  // Let queue.js schedule synchronized playback against server time.
+  // Let queue.js schedule synchronized playback against server time, and
+  // give its catch-up math (recoverDisplayPlayback) the same clock-offset
+  // corrected "now" instead of the display's own possibly-skewed clock.
   setScheduler(scheduleAtServerTime);
+  setServerNow(getServerNowMs);
   enableSynchronizedPlayback();
 
   // Sound stays muted until a real click/tap happens somewhere on the page

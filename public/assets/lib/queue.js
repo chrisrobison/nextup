@@ -24,6 +24,9 @@ const displayPlayer = {
   provider: null,            // 'youtube' | 'self_hosted' | 'none'
   requestId: null,
   cued: false,
+  lastCueStartedAt: 0,       // Date.now() when the current cue began — lets
+                             // reconcileSyncedPlayback tell "still legitimately
+                             // loading" apart from "actually stuck"
   pendingPlayback: { startAtServerMs: null, offsetSeconds: 0 },
   cancelScheduled: null,     // cancel fn for the scheduled play
   driftTimer: null,          // self-hosted drift correction interval
@@ -45,6 +48,18 @@ const displayPlayer = {
   defaultVolume: 80,
   synchronizedCommands: false,
   recoveredCommandId: null,
+  // Bumped on every cueDisplayPlayer() call; async readiness callbacks
+  // (awaitVideoLoaded, canplay) capture it and check it's still current
+  // before acting, so a stale callback from an earlier/aborted cue can
+  // never clobber state a newer cue already owns.
+  cueToken: 0,
+  // Set when unlockDisplayAudio()/unmuteDisplayPlayer() want to rebuild
+  // the player unmuted but a cue is still in flight (see cueDisplayPlayer's
+  // ready()) — rebuilding mid-cue used to destroy the very player the cue
+  // was waiting on, stranding the display on a blank/half-loaded video.
+  audioUnlockPending: false,
+  // Rate-limits reconcileSyncedPlayback()'s retries below.
+  lastRecoveryAttemptAt: 0,
 };
 
 /**
@@ -140,7 +155,7 @@ export function unmuteDisplayPlayer() {
   displayPlayer.muted = false;
   if (!shouldBeAudible()) return; // still waiting on this tab's own tap-to-enable gesture
   if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
-    recreateYouTubePlayerUnmuted();
+    requestAudioUnlockRebuild();
   } else {
     applyPlayerMuteState();
   }
@@ -273,7 +288,7 @@ export function unlockDisplayAudio() {
   displayPlayer.audioUnlocked = true;
   if (!shouldBeAudible()) return;
   if (displayPlayer.provider === 'youtube' && displayPlayer.ytPlayer) {
-    recreateYouTubePlayerUnmuted();
+    requestAudioUnlockRebuild();
   } else if (displayPlayer.provider === 'self_hosted') {
     const v = $('[data-display-video]');
     if (v) {
@@ -281,6 +296,27 @@ export function unlockDisplayAudio() {
       v.volume = displayPlayer.defaultVolume / 100;
     }
   }
+}
+
+/**
+ * Gate for recreateYouTubePlayerUnmuted(): a tap/click can land at any
+ * moment, including mid-cue for the next song (cueDisplayPlayer() re-cues
+ * the *same* live displayPlayer.ytPlayer and polls it via
+ * awaitVideoLoaded — see there). Tearing that player down and rebuilding
+ * it out from under an in-flight cue used to strand the display on a
+ * half-built player, reporting "ready" only via awaitVideoLoaded's
+ * timeout with nothing actually loaded — the display would go black on
+ * whatever song was cued when the tap landed and never recover, since
+ * synchronized-command displays have no other path back to a working
+ * player. So: rebuild immediately if nothing is in flight, otherwise defer
+ * until the current cue's ready() fires (see cueDisplayPlayer below).
+ */
+function requestAudioUnlockRebuild() {
+  if (!displayPlayer.cued) {
+    displayPlayer.audioUnlockPending = true;
+    return;
+  }
+  recreateYouTubePlayerUnmuted();
 }
 
 function recreateYouTubePlayerUnmuted() {
@@ -291,9 +327,14 @@ function recreateYouTubePlayerUnmuted() {
   if (!ytHost() || !videoId) return;
 
   let resumeAt = 0;
-  let wasPlaying = true;
+  // Only treat it as "was playing" if it actually was — a video that's
+  // merely cued/paused (state !== PLAYING) sits in UNSTARTED, which is
+  // also != PAUSED, so the old "!== PAUSED" check force-started playback
+  // for videos that hadn't started yet, jumping the gun on the
+  // synchronized play_at time the other screens were still waiting for.
+  let wasPlaying = false;
   try { resumeAt = displayPlayer.ytPlayer.getCurrentTime() || 0; } catch (_) {}
-  try { wasPlaying = displayPlayer.ytPlayer.getPlayerState() !== YT.PlayerState.PAUSED; } catch (_) {}
+  try { wasPlaying = displayPlayer.ytPlayer.getPlayerState() === YT.PlayerState.PLAYING; } catch (_) {}
 
   try { displayPlayer.ytPlayer.destroy(); } catch (_) {}
   displayPlayer.ytPlayer = null;
@@ -315,6 +356,14 @@ function recreateYouTubePlayerUnmuted() {
           if (wasPlaying) e.target.playVideo();
         } catch (_) {}
       },
+      // Mirrors buildYouTubePlayer's listener — without it, a screen that's
+      // ever had its audio unlocked permanently loses CUED-state detection
+      // for every later rebuild of this player.
+      onStateChange: e => {
+        if (e.data === YT.PlayerState.CUED) {
+          try { displayPlayer.onCued?.(); } catch (_) {}
+        }
+      },
     },
   });
 }
@@ -332,6 +381,19 @@ let scheduleAt = (serverMs, cb) => {
 
 export function setScheduler(fn) {
   if (typeof fn === 'function') scheduleAt = fn;
+}
+
+/**
+ * Server wall-clock time. Defaults to the browser's own clock; ws.js calls
+ * setServerNow() with its clock-offset-corrected getServerNowMs() once
+ * connected — same reasoning as setScheduler() above, and needed so
+ * recoverDisplayPlayback's catch-up math compares like with like against
+ * display.play_started_at_ms (a server timestamp).
+ */
+let serverNow = () => Date.now();
+
+export function setServerNow(fn) {
+  if (typeof fn === 'function') serverNow = fn;
 }
 
 export async function loadQueue() {
@@ -619,9 +681,13 @@ function syncDisplayPlayer(current, display = {}, next = null) {
   }
 
   // Display pages use cue/play-at as the single playback authority. Queue
-  // refreshes still update labels and overlays, but must never start media:
-  // doing so would race the scheduled command and desynchronize screens.
+  // refreshes still update labels and overlays, but must never start media
+  // directly: doing so would race the scheduled command and desynchronize
+  // screens. They can, however, notice when the cue/play-at handshake for
+  // the current command never actually landed (dropped message, a cue that
+  // stalled) and retry it — see reconcileSyncedPlayback.
   if (displayPlayer.synchronizedCommands) {
+    reconcileSyncedPlayback(display);
     return;
   }
 
@@ -699,7 +765,13 @@ export function cueDisplayPlayer(videoInfo, onReady) {
   displayPlayer.provider = provider;
   displayPlayer.requestId = info.requestId ?? null;
   displayPlayer.cued = false;
+  displayPlayer.lastCueStartedAt = Date.now();
   displayPlayer.pendingPlayback = { startAtServerMs: null, offsetSeconds: 0 };
+  // Any async readiness signal (awaitVideoLoaded's poll/timeout, the
+  // self-hosted canplay listener) that isn't for the current call is
+  // stale and must not touch shared state — see the token check in
+  // ready() below.
+  const token = ++displayPlayer.cueToken;
 
   const yt = ytHost();
   const v = $('[data-display-video]');
@@ -709,9 +781,16 @@ export function cueDisplayPlayer(videoInfo, onReady) {
   // from the poll fallback below, whichever wins.
   let readyFired = false;
   const ready = () => {
-    if (readyFired) return;
+    if (readyFired || token !== displayPlayer.cueToken) return;
     readyFired = true;
     displayPlayer.cued = true;
+    // A tap/click that landed while this cue was still in flight couldn't
+    // safely rebuild the player then (see requestAudioUnlockRebuild) — do
+    // it now that this song is actually loaded.
+    if (displayPlayer.audioUnlockPending) {
+      displayPlayer.audioUnlockPending = false;
+      if (displayPlayer.provider === 'youtube' && shouldBeAudible()) recreateYouTubePlayerUnmuted();
+    }
     try { onReady?.(provider); } catch (_) {}
   };
 
@@ -776,6 +855,25 @@ export function cueDisplayPlayer(videoInfo, onReady) {
   ready();
 }
 
+/** Shared by recoverDisplayPlayback and reconcileSyncedPlayback so both
+ * agree on what a given display/command state should actually be showing. */
+function resolveDisplayVideoInfo(display) {
+  const manualUrl = display.manual_video_url || '';
+  const manualYtId = extractYouTubeId(manualUrl);
+  const manualFileUrl = isPlayableVideoFile(manualUrl) ? manualUrl : '';
+  const ytId = display.youtube_video_id || extractYouTubeId(display.youtube_url || '');
+  const videoUrl = display.song_video_url || '';
+  return manualYtId
+    ? { provider: 'youtube', youtubeVideoId: manualYtId, videoUrl: '' }
+    : manualFileUrl
+      ? { provider: 'self_hosted', youtubeVideoId: '', videoUrl: manualFileUrl }
+      : ytId
+        ? { provider: 'youtube', youtubeVideoId: ytId, videoUrl: '' }
+        : videoUrl
+          ? { provider: 'self_hosted', youtubeVideoId: '', videoUrl }
+          : { provider: 'none', youtubeVideoId: '', videoUrl: '' };
+}
+
 /**
  * Rejoin an already-running command after a page refresh or display reconnect.
  * The persisted server timestamp lets the display seek to the point the other
@@ -787,20 +885,7 @@ export function recoverDisplayPlayback(display = {}) {
   if (!commandId || commandId === displayPlayer.recoveredCommandId) return;
   displayPlayer.recoveredCommandId = commandId;
 
-  const manualUrl = display.manual_video_url || '';
-  const manualYtId = extractYouTubeId(manualUrl);
-  const manualFileUrl = isPlayableVideoFile(manualUrl) ? manualUrl : '';
-  const ytId = display.youtube_video_id || extractYouTubeId(display.youtube_url || '');
-  const videoUrl = display.song_video_url || '';
-  const info = manualYtId
-    ? { provider: 'youtube', youtubeVideoId: manualYtId, videoUrl: '' }
-    : manualFileUrl
-      ? { provider: 'self_hosted', youtubeVideoId: '', videoUrl: manualFileUrl }
-      : ytId
-        ? { provider: 'youtube', youtubeVideoId: ytId, videoUrl: '' }
-        : videoUrl
-          ? { provider: 'self_hosted', youtubeVideoId: '', videoUrl }
-          : { provider: 'none', youtubeVideoId: '', videoUrl: '' };
+  const info = resolveDisplayVideoInfo(display);
 
   cueDisplayPlayer({ requestId: display.now_request_id, ...info }, () => {
     const baseOffset = Number(display.play_offset_seconds) || 0;
@@ -808,10 +893,76 @@ export function recoverDisplayPlayback(display = {}) {
       if (baseOffset > 0) seekDisplayPlayer(baseOffset);
       return;
     }
-    const startedAt = Number(display.play_started_at_ms) || Date.now();
-    const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
-    playDisplayPlayerAt(Date.now() + 50, baseOffset + elapsed);
+    // display.play_started_at_ms is a server wall-clock timestamp
+    // (DisplayController sets it via PHP microtime()) — comparing it
+    // against the browser's raw Date.now() computes the wrong elapsed
+    // time whenever the display's local clock is skewed from the server
+    // (common on smart-TV/embedded browsers), landing the catch-up seek
+    // at the wrong point in the song. serverNow() is the same
+    // WS-clock-corrected time playDisplayPlayerAt's own scheduler uses.
+    const startedAt = Number(display.play_started_at_ms) || serverNow();
+    const elapsed = Math.max(0, (serverNow() - startedAt) / 1000);
+    playDisplayPlayerAt(serverNow() + 50, baseOffset + elapsed);
   });
+}
+
+/**
+ * Self-healing fallback for synchronized-command displays. cue/play_at
+ * pushes are the normal path, but if one is ever dropped, or a cue stalls
+ * (see requestAudioUnlockRebuild above for one way that used to happen
+ * before it was fixed), the old poll-driven display simply re-rendered
+ * whatever the server said should be playing on the very next refresh.
+ * That safety net disappeared when synchronized commands became the only
+ * path allowed to start media (see the early return in syncDisplayPlayer)
+ * — a stalled cue used to leave a screen stuck for the rest of the night
+ * instead of a few seconds. Restore it: notice when what's actually loaded
+ * doesn't match what the server says should be playing, and retry —
+ * rate-limited so a genuinely-broken player isn't hammered every poll.
+ */
+function reconcileSyncedPlayback(display) {
+  const commandId = String(display.play_command_id || '');
+  if (!commandId) return;
+
+  // A cue just started (normal live push, not through recoverDisplayPlayback)
+  // is not yet "cued" for a little while — that's expected, not stuck.
+  // awaitVideoLoaded gives up after 4000ms, so anything younger than that
+  // still deserves the benefit of the doubt.
+  if (!displayPlayer.cued && Date.now() - displayPlayer.lastCueStartedAt < 4500) return;
+
+  if (isSyncedPlaybackHealthy(display)) return;
+
+  const now = Date.now();
+  if (now - displayPlayer.lastRecoveryAttemptAt < 3000) return;
+  displayPlayer.lastRecoveryAttemptAt = now;
+
+  // Let recoverDisplayPlayback retry this command instead of treating an
+  // earlier attempt (successful or not) as the final word on it.
+  if (displayPlayer.recoveredCommandId === commandId) displayPlayer.recoveredCommandId = null;
+  recoverDisplayPlayback(display);
+}
+
+/**
+ * Does what's actually loaded match what the server says should be
+ * playing? Deliberately source-agnostic — a normal live display:cue push
+ * never touches displayPlayer.recoveredCommandId (only recoverDisplayPlayback
+ * does), so gating health on that field would flag every healthy live-pushed
+ * screen as "unhealthy" and needlessly re-recover it every few seconds.
+ */
+function isSyncedPlaybackHealthy(display) {
+  if (!displayPlayer.cued) return false;
+  if (String(displayPlayer.requestId || '') !== String(display.now_request_id || '')) return false;
+  const info = resolveDisplayVideoInfo(display);
+  if (info.provider === 'youtube') {
+    if (!displayPlayer.ytPlayer) return false;
+    let loadedId = null;
+    try { loadedId = displayPlayer.ytPlayer.getVideoData?.().video_id ?? null; } catch (_) {}
+    return loadedId === info.youtubeVideoId;
+  }
+  if (info.provider === 'self_hosted') {
+    const v = $('[data-display-video]');
+    return !!v && !v.hidden;
+  }
+  return true; // provider 'none' — nothing to load; labels already reflect it.
 }
 
 /**
